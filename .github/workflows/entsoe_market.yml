@@ -1,7 +1,7 @@
 name: ENTSO-E outages, outage revisions and Swiss border flows
 
 # ENTSO-E (secret ENTSOE_TOKEN): unavailability of generation/production units in CH and FR with every revision and its
-# publication time, older revisions per outage, physical flows on the Swiss borders. Daily 05:41 UTC, before the
+# publication time, older revisions per outage, physical flows on the Swiss borders, EXAA (10:15 CET) auction prices AT/DE. Daily 05:41 UTC, before the
 # 07:00 Swiss forecast issue; flows on Saturdays. Each part is committed as soon as it is done.
 # Code: this public repo. Data: written into the private data repo (checked out with the HPFC_DATA_TOKEN secret,
 # write access to that repo only) and pushed there. Logs show counts and dates only.
@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       parts:
-        description: "flows ntc outages revisions (empty = daily default)"
+        description: "flows ntc outages revisions exaa (empty = daily default)"
         required: false
         default: ""
 
@@ -68,6 +68,7 @@ jobs:
           if want outages; then
             for z in CH FR; do python $C/collect_entsoe_market.py outages --zone $z || rc=1; commit "entsoe outages $z" || rc=1; done
           fi
+          if want exaa; then python $C/collect_entsoe_exaa.py || rc=1; commit "entsoe exaa" || rc=1; fi
           if want revisions; then
             REV_MAX_MIN=150 python $C/collect_entsoe_market.py revisions || rc=1; commit "entsoe outage revisions" || rc=1
           fi
