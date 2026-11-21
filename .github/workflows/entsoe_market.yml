@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       parts:
-        description: "flows ntc outages revisions exaa (empty = daily default)"
+        description: "flows ntc outages revisions exaa reservoirs (empty = daily default)"
         required: false
         default: ""
 
@@ -67,6 +67,9 @@ jobs:
           if echo " $PARTS " | grep -q " ntc "; then python $C/collect_entsoe_market.py ntc || rc=1; commit "entsoe ntc" || rc=1; fi
           if want outages; then
             for z in CH FR; do python $C/collect_entsoe_market.py outages --zone $z || rc=1; commit "entsoe outages $z" || rc=1; done
+          fi
+          if { [ -z "$PARTS" ] && [ "$(date -u +%u)" = 4 ]; } || echo " $PARTS " | grep -q " reservoirs "; then
+            python $C/collect_entsoe_reservoirs.py || rc=1; commit "entsoe reservoirs" || rc=1
           fi
           if want exaa; then python $C/collect_entsoe_exaa.py || rc=1; commit "entsoe exaa" || rc=1; fi
           if want revisions; then
