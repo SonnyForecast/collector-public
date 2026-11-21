@@ -1,0 +1,60 @@
+name: Weather forecast history (DWD ICON, Open-Meteo)
+
+# Open-Meteo: DWD ICON (icon_seamless, CC BY 4.0) by-lead history at the same points; appends. 02:13 and 14:13 UTC,
+# away from the ECMWF run, up to 45 min each (Open-Meteo free tier: 10,000 calls/day, non-commercial).
+# Code: this public repo. Data: written into the private data repo (checked out with the HPFC_DATA_TOKEN secret,
+# write access to that repo only) and pushed there. Logs show counts and dates only.
+on:
+  schedule:
+    - cron: "13 2 * * *"
+    - cron: "13 14 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: open-meteo
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      DATA_ROOT: ${{ github.workspace }}/data-repo
+      DIRS: data/weather_fc/history_icon
+      HIST_MAX_MIN: "45"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: SonnyForecast/HPFC-data
+          token: ${{ secrets.HPFC_DATA_TOKEN }}
+          path: data-repo
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests pandas
+      - name: Collect and push
+        working-directory: data-repo
+        run: |
+          git config user.name "collector-public"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          commit() {
+            for d in $DIRS; do [ -e "$d" ] && git add "$d"; done
+            if git diff --cached --quiet; then echo "nothing new ($1)"; return 0; fi
+            git commit -q -m "$1 $(date -u +%Y-%m-%d) (collector-public)"
+            for i in 1 2 3 4 5; do
+              if git pull -q --rebase && git push -q; then echo "pushed $1"; return 0; fi
+              sleep 15
+            done
+            echo "::error::could not push $1"; return 1
+          }
+          C=$GITHUB_WORKSPACE/collectors
+          rc=0
+          python $C/collect_weather_fc.py history --model icon || rc=1
+          python $C/collect_weather_fc.py --status | grep -c icon || true
+          commit "ICON weather history" || rc=1
+          exit $rc

@@ -1,0 +1,62 @@
+name: Energy-Charts futures and generation, World Bank gas, EUA auctions, ENTSO-E load
+
+# Energy-Charts price futures, spot, BFE reservoirs; World Bank gas, EUA auction results, ECB EUR/USD; ENTSO-E actual
+# load and day-ahead load forecasts (secret ENTSOE_TOKEN); Energy-Charts hourly generation and installed capacity.
+# Saturdays 05:27 UTC.
+# Code: this public repo. Data: written into the private data repo (checked out with the HPFC_DATA_TOKEN secret,
+# write access to that repo only) and pushed there. Logs show counts and dates only.
+on:
+  schedule:
+    - cron: "27 5 * * 6"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: energy_charts
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      DATA_ROOT: ${{ github.workspace }}/data-repo
+      ENTSOE_TOKEN: ${{ secrets.ENTSOE_TOKEN }}
+      DIRS: data/energy_charts data/bfe data/fuels data/entsoe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: SonnyForecast/HPFC-data
+          token: ${{ secrets.HPFC_DATA_TOKEN }}
+          path: data-repo
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests pandas
+      - name: Collect and push
+        working-directory: data-repo
+        run: |
+          git config user.name "collector-public"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          commit() {
+            for d in $DIRS; do [ -e "$d" ] && git add "$d"; done
+            if git diff --cached --quiet; then echo "nothing new ($1)"; return 0; fi
+            git commit -q -m "$1 $(date -u +%Y-%m-%d) (collector-public)"
+            for i in 1 2 3 4 5; do
+              if git pull -q --rebase && git push -q; then echo "pushed $1"; return 0; fi
+              sleep 15
+            done
+            echo "::error::could not push $1"; return 1
+          }
+          C=$GITHUB_WORKSPACE/collectors
+          rc=0
+          python $C/collect_energy_charts.py || rc=1
+          python $C/collect_fuels.py || rc=1
+          python $C/collect_entsoe_load.py || rc=1
+          python $C/collect_fundamentals.py --out $RUNNER_TEMP/fundamentals --csv-dir data/energy_charts/fundamentals || rc=1
+          commit "energy-charts, fuels, entsoe load" || rc=1
+          exit $rc
