@@ -1,0 +1,58 @@
+name: Weather forecast history (NOAA GFS, dynamical.org)
+
+# NOAA GFS archived forecasts (dynamical.org Zarr, CC BY 4.0) at the weather points, 00 UTC runs, lead 0-72 h, from
+# May 2021: point-in-time weather for training on years before the Open-Meteo lead-time archive starts (2024).
+# Resumable, up to 5 h per run (free minutes on this public repo); daily at 03:37 UTC until complete, then appends.
+on:
+  schedule:
+    - cron: "37 3 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect | history"
+        required: false
+        default: "history"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weather_gfs
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      DATA_ROOT: ${{ github.workspace }}/data-repo
+      MODE: ${{ github.event.inputs.mode || 'history' }}
+      DIRS: data/weather_fc/history_gfs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: SonnyForecast/HPFC-data
+          token: ${{ secrets.HPFC_DATA_TOKEN }}
+          path: data-repo
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q "xarray>=2025.1.2" "zarr>=3.0.8" fsspec aiohttp requests pandas
+      - name: Collect and push
+        working-directory: data-repo
+        run: |
+          git config user.name "collector-public"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "$MODE" = "inspect" ]; then python $GITHUB_WORKSPACE/collectors/collect_gfs_history.py inspect; exit $?; fi
+          rc=0
+          python $GITHUB_WORKSPACE/collectors/collect_gfs_history.py history || rc=1
+          for d in $DIRS; do [ -e "$d" ] && git add "$d"; done
+          if git diff --cached --quiet; then echo "nothing new"; exit $rc; fi
+          git commit -q -m "GFS weather history $(date -u +%Y-%m-%d) (collector-public)"
+          for i in 1 2 3 4 5; do
+            if git pull -q --rebase && git push -q; then echo "pushed"; break; fi
+            sleep 15
+          done
+          exit $rc

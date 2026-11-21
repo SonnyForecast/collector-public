@@ -9,6 +9,7 @@ This repository holds **code only**: no data is stored here, and the forecasting
 | `weather_icon.yml` | Open-Meteo: DWD ICON by-lead history | 02:13, 14:13 |
 | `energy_charts.yml` | Energy-Charts (futures, generation, capacity), World Bank gas, EEX EUA auction results, ECB EUR/USD, ENTSO-E load | Saturday 05:27 |
 | `entsoe_market.yml` | ENTSO-E Transparency Platform: outages with revisions, cross-border physical flows | daily 05:41 |
+| `weather_gfs.yml` | NOAA GFS archived forecasts (dynamical.org, CC BY 4.0), 00 UTC runs from May 2021 | daily 03:37 |
 
 Collected files are written to a private data repository (`DATA_ROOT`), not to this one, and the logs show only
 counts and dates. Each source keeps its own terms: Open-Meteo free tier and Energy-Charts data for non-commercial use,
