@@ -39,7 +39,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -q "xarray>=2025.1.2" "zarr>=3.0.8" fsspec aiohttp requests pandas
+      - run: pip install -q "xarray>=2025.1.2" "zarr>=3.0.8" "dask[array]" fsspec aiohttp requests pandas
       - name: Collect and push
         working-directory: data-repo
         run: |

@@ -33,9 +33,10 @@ WANT = {"temperature_2m": "temp_c",
         "total_cloud_cover_atmosphere": "cloud_pct"}
 
 
-def open_ds():
+def open_ds(parallel=False):
     import xarray as xr
-    return xr.open_zarr(URL, chunks=None, decode_timedelta=True)
+    # parallel: dask fetches the needed chunks concurrently (chunks are 1 run x 105 leads x 121 x 121 grid points)
+    return xr.open_zarr(URL, chunks={} if parallel else None, decode_timedelta=True)
 
 
 def inspect():
@@ -50,7 +51,9 @@ def inspect():
 def history(start, end):
     import xarray as xr
     t0 = time.time()
-    ds = open_ds()
+    import dask
+    dask.config.set(scheduler="threads", num_workers=16)
+    ds = open_ds(parallel=True)
     have = {k: v for k, v in WANT.items() if k in ds.data_vars}
     missing = [k for k in WANT if k not in ds.data_vars]
     if missing:
