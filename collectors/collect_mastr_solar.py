@@ -38,8 +38,17 @@ FIRST = "2019-01"
 
 def load_units():
     from open_mastr import Mastr
+    import time
     db = Mastr()
-    db.download(method="bulk", data=["solar"])
+    for i in range(4):                              # the server sometimes drops the first connection
+        try:
+            db.download(method="bulk", data=["solar"])
+            break
+        except Exception as e:
+            print(f"download attempt {i + 1} failed: {repr(e)[:200]}", flush=True)
+            if i == 3:
+                raise
+            time.sleep(120 * (i + 1))
     cols = pd.read_sql("SELECT * FROM solar_extended LIMIT 1", db.engine).columns.tolist()
     want = ["Nettonennleistung", "Bruttoleistung", "Inbetriebnahmedatum", "DatumEndgueltigeStilllegung",
             "Registrierungsdatum", "EinheitBetriebsstatus", "FernsteuerbarkeitDv", "FernsteuerbarkeitNb",

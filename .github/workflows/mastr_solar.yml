@@ -36,6 +36,10 @@ jobs:
       - run: pip install -q "open-mastr>=1.1" pandas
       - name: Free disk space for the export
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL; df -h / | tail -1
+      - name: Reachability of marktstammdatenregister.de
+        run: |
+          curl -sS -o /dev/null -w "page %{http_code} %{time_total}s\n" -A "Mozilla/5.0" https://www.marktstammdatenregister.de/MaStR/Datendownload || true
+          curl -sS -I -A "Mozilla/5.0" "https://download.marktstammdatenregister.de/" 2>&1 | head -3 || true
       - name: Collect and push
         working-directory: data-repo
         run: |
