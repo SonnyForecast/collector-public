@@ -9,6 +9,8 @@ completely are skipped; the last 45 days are refreshed every run. Logs show coun
 
     python collect_entsoe_exaa.py                  # from 2024-01 to tomorrow
     python collect_entsoe_exaa.py 2025-10          # from that month
+    python collect_entsoe_exaa.py --sdac 2026-10   # SDAC prices (sequence 1) CH, DE_LU, FR, IT_NORTH, AT ->
+                                                   # data/entsoe/sdac_<zone>.csv, backup for Energy-Charts gaps
 """
 import os
 import sys
@@ -23,6 +25,10 @@ from entsoe_api import EIC, children, find
 DATA_HOME = Path(os.environ.get("DATA_ROOT", Path(__file__).resolve().parent))
 OUT = DATA_HOME / "data" / "entsoe"
 ZONES = ["AT", "DE_LU"]
+SDAC_ZONES = ["CH", "DE_LU", "FR", "IT_NORTH", "AT"]
+SDAC = "--sdac" in sys.argv
+if SDAC:
+    sys.argv.remove("--sdac")
 
 
 def parse_prices(xml_bytes):
@@ -50,6 +56,11 @@ def fetch_month(token, zone, m0):
     p = {"documentType": "A44", "in_Domain": EIC[zone], "out_Domain": EIC[zone],
          "contract_MarketAgreement.type": "A01", "classificationSequence_AttributeInstanceComponent.position": "2",
          "periodStart": m0.strftime("%Y%m%d0000"), "periodEnd": m1.strftime("%Y%m%d0000")}
+    if SDAC:                                  # SDAC = sequence 1 where several auctions exist (DE_LU, AT), else the only one
+        if zone in ("DE_LU", "AT"):
+            p["classificationSequence_AttributeInstanceComponent.position"] = "1"
+        else:
+            p.pop("classificationSequence_AttributeInstanceComponent.position")
     return parse_prices(entsoe_api.fetch(token, p))
 
 
@@ -57,11 +68,11 @@ def main():
     token = os.environ.get("ENTSOE_TOKEN", "").strip()
     if not token:
         print("ENTSOE_TOKEN missing: skipped"); return
-    first = pd.Timestamp(sys.argv[1] + "-01" if len(sys.argv) > 1 else "2024-01-01")
+    first = pd.Timestamp(sys.argv[1] + "-01" if len(sys.argv) > 1 else ("2026-10-01" if SDAC else "2024-01-01"))
     today = pd.Timestamp.utcnow().tz_localize(None).normalize()
     OUT.mkdir(parents=True, exist_ok=True)
-    for zone in ZONES:
-        f = OUT / f"exaa_{zone}.csv"
+    for zone in (SDAC_ZONES if SDAC else ZONES):
+        f = OUT / f"{'sdac' if SDAC else 'exaa'}_{zone}.csv"
         old = pd.read_csv(f, parse_dates=["ts_utc"]) if f.exists() else pd.DataFrame(columns=["ts_utc", "resolution_min", "price_eur_mwh"])
         have = set(pd.to_datetime(old.ts_utc).dt.strftime("%Y-%m")) if len(old) else set()
         new = []

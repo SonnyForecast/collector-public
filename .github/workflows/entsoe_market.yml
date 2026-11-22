@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       parts:
-        description: "flows ntc outages revisions exaa reservoirs (empty = daily default)"
+        description: "flows ntc outages revisions exaa sdac reservoirs (empty = daily default)"
         required: false
         default: ""
 
@@ -72,6 +72,7 @@ jobs:
             python $C/collect_entsoe_reservoirs.py || rc=1; commit "entsoe reservoirs" || rc=1
           fi
           if want exaa; then python $C/collect_entsoe_exaa.py || rc=1; commit "entsoe exaa" || rc=1; fi
+          if want sdac; then python $C/collect_entsoe_exaa.py --sdac || rc=1; commit "entsoe sdac" || rc=1; fi
           if want revisions; then
             REV_MAX_MIN=150 python $C/collect_entsoe_market.py revisions || rc=1; commit "entsoe outage revisions" || rc=1
           fi
