@@ -75,7 +75,13 @@ def history(start, end, force=False, model="ecmwf"):
     out = DIR / sub; out.mkdir(parents=True, exist_ok=True)
     hourly = [f"{v}_previous_day{d}" for v in VARS for d in LEADS]
     used, t0, failed = 0.0, time.time(), 0
-    for p in points().itertuples():
+    pts = points()
+    last = {}                                   # stalest points first: with server timeouts the time limit is hit
+    for q in pts.point:                         # early, and a fixed order left the last points behind (Nov 2026)
+        f = out / f"{q}.csv.gz"
+        last[q] = pd.read_csv(f, usecols=["time_utc"]).time_utc.max() if f.exists() and not force else ""
+    pts = pts.assign(_last=pts.point.map(last)).sort_values("_last", kind="stable")
+    for p in pts.itertuples():
         if time.time() - t0 > MAX_MIN * 60:
             print(f"time limit of {MAX_MIN} min reached; the rest next run", flush=True); break
         f = out / f"{p.point}.csv.gz"
