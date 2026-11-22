@@ -80,7 +80,10 @@ def history(start, end, force=False, model="ecmwf"):
     for q in pts.point:                         # early, and a fixed order left the last points behind (Nov 2026)
         f = out / f"{q}.csv.gz"
         last[q] = pd.read_csv(f, usecols=["time_utc"]).time_utc.max() if f.exists() and not force else ""
-    pts = pts.assign(_last=pts.point.map(last)).sort_values("_last", kind="stable")
+    recent = (pd.Timestamp.now() - pd.Timedelta(days=60)).strftime("%Y-%m-%d")
+    # catch up the recent gaps first (stalest first), then new points with a long backfill
+    key = pts.point.map(lambda q: ("0" + last[q]) if last[q] >= recent else ("1" + last[q]))
+    pts = pts.assign(_last=key).sort_values("_last", kind="stable")
     for p in pts.itertuples():
         if time.time() - t0 > MAX_MIN * 60:
             print(f"time limit of {MAX_MIN} min reached; the rest next run", flush=True); break
