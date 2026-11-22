@@ -60,8 +60,10 @@ def load_units():
 
 
 def yesno(s):
-    s = s.astype(str).str.lower()
-    return np.where(s.isin(["1", "true", "ja", "yes"]), "1", np.where(s.isin(["0", "false", "nein", "no"]), "0", "na"))
+    s = s.astype(str).str.strip().str.lower()
+    yes = ["1", "1.0", "true", "ja", "yes"]
+    no = ["0", "0.0", "false", "nein", "no"]
+    return np.where(s.isin(yes), "1", np.where(s.isin(no), "0", "na"))
 
 
 def classify(df):
@@ -109,11 +111,15 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     agg.round(3).to_csv(OUT / "solar_capacity_monthly.csv", index=False)
     last = agg[agg.month == agg.month.max()]
-    meta = {"export_date": pd.Timestamp.today().strftime("%Y-%m-%d"), "units_read": int(len(df)),
+    raw = {c: df[c].astype(str).value_counts().head(8).to_dict() for c in
+           ("FernsteuerbarkeitDv", "FernsteuerbarkeitNb", "Einspeisungsart", "Leistungsbegrenzung", "EinheitBetriebsstatus")
+           if c in df}
+    meta = {"raw_value_counts": raw, "export_date": pd.Timestamp.today().strftime("%Y-%m-%d"), "units_read": int(len(df)),
             "units_used": int(len(u)), "columns": cols,
             "licence": "Marktstammdatenregister - © Bundesnetzagentur | dl-de/by-2-0",
             "total_gw_last_month": round(float(last.mw.sum()) / 1000, 2),
             "gw_last_month_by_dv": (last.groupby("dv").mw.sum() / 1000).round(2).to_dict(),
+            "gw_last_month_by_nb": (last.groupby("nb").mw.sum() / 1000).round(2).to_dict(),
             "gw_last_month_by_vintage": (last.groupby("vintage").mw.sum() / 1000).round(2).to_dict(),
             "gw_last_month_by_size": (last.groupby("size").mw.sum() / 1000).round(2).to_dict()}
     (OUT / "solar_meta.json").write_text(json.dumps(meta, indent=1, ensure_ascii=False))
