@@ -1,0 +1,25 @@
+name: ECMWF MARS access test
+
+# One small MARS (operational IFS) and one TIGGE request with secrets ECMWF_API_KEY / ECMWF_API_EMAIL, to see what the
+# key gives access to before any backfill. Manual only; nothing is pushed.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q ecmwf-api-client
+      - name: Request one forecast run
+        env:
+          ECMWF_API_KEY: ${{ secrets.ECMWF_API_KEY }}
+          ECMWF_API_EMAIL: ${{ secrets.ECMWF_API_EMAIL }}
+        run: python collectors/ecmwf_mars_test.py
