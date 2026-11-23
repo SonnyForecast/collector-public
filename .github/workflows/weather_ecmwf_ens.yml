@@ -1,0 +1,32 @@
+name: Weather forecast history (ECMWF IFS ENS, dynamical.org)
+
+# ECMWF IFS ENS archived forecasts (dynamical.org, CC BY 4.0 + ECMWF Terms of Use), 00 UTC inits from Oct 2020:
+# longer point-in-time weather history (training before 2024) and the ensemble spread. Step 1: inspect only.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "inspect"
+        required: false
+        default: "inspect"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weather_ecmwf_ens
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      MODE: ${{ github.event.inputs.mode || 'inspect' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q "dynamical-catalog>=0.8.0" "xarray>=2025.1.2" "zarr>=3.0.8" "dask[array]" fsspec aiohttp requests pandas
+      - run: python collectors/collect_ecmwf_ens_history.py "$MODE"
