@@ -6,9 +6,9 @@ forecast data processed by dynamical.org from ECMWF Open Data".
 Point-in-time weather for training before the Open-Meteo lead-time archive (2024) and the forecast spread. Per 00 UTC
 run, leads 0-96 h (3-hourly), stored in HPFC-data under data/weather_fc/history_ens/:
 
-  points/<point>.csv.gz    the 37 points of points.csv (nearest cell): control, member mean and sd of
+  points/<point>/<yyyy-mm>.csv.gz    the 37 points of points.csv (nearest cell): control, member mean and sd of
                            wind100_ms, ghi_wm2, temp_c; control and mean of precip_mmh
-  regions/<region>.csv.gz  area averages over the grid cells of a region (cos-latitude weights; uniform within the
+  regions/<region>/<yyyy-mm>.csv.gz  area averages over the grid cells of a region (cos-latitude weights; uniform within the
                            region in this version, capacity weights later): for each member the region value of
                            wind_cf (power curve of the 100 m wind, cut-in 3 m/s, rated 12 m/s, as spot_fc),
                            ghi_wm2, temp_c, precip_mmh; stored as control, mean, sd, p10, p90 over the 51 members
@@ -17,6 +17,7 @@ run, leads 0-96 h (3-hourly), stored in HPFC-data under data/weather_fc/history_
 
   python collect_ecmwf_ens_history.py inspect
   python collect_ecmwf_ens_history.py history [--start 2020-10-15] [--end yyyy-mm-dd]
+One file per init month, so the daily update rewrites only the current month (keeps the data repo's history small).
 Resumable by month (months stored for every point and region are skipped); stops after ENS_MAX_MIN minutes.
 """
 import argparse
@@ -145,10 +146,10 @@ def history(start, end):
                for p in pts.itertuples()}
     inits = pd.DatetimeIndex(ds.init_time.values)
     inits = inits[(inits >= pd.Timestamp(start)) & (inits <= pd.Timestamp(end))]
-    files = [OUT / "points" / f"{p}.csv.gz" for p in pts_idx] + [OUT / "regions" / f"{r}.csv.gz" for r in W]
+    dirs = [OUT / "points" / p for p in pts_idx] + [OUT / "regions" / r for r in W]
     done = None
-    for f in files:
-        m = set(pd.read_csv(f, usecols=["init_utc"]).init_utc.str[:7]) if f.exists() else set()
+    for d in dirs:
+        m = {f.name[:7] for f in d.glob("*.csv.gz")} if d.exists() else set()
         done = m if done is None else done & m
     last = max(done) if done else None
     for m in sorted({i.strftime("%Y-%m") for i in inits}):
@@ -171,9 +172,9 @@ def history(start, end):
             for k, v in rrow.items():
                 R.setdefault(k, []).append(v)
         for k, v in P.items():
-            append(OUT / "points" / f"{k}.csv.gz", pd.concat(v))
+            append(OUT / "points" / k / f"{m}.csv.gz", pd.concat(v))
         for k, v in R.items():
-            append(OUT / "regions" / f"{k}.csv.gz", pd.concat(v))
+            append(OUT / "regions" / k / f"{m}.csv.gz", pd.concat(v))
         print(f"{m}: {len(mi)} runs in {time.time() - t1:.0f}s (total {(time.time() - t0) / 60:.0f} min)", flush=True)
 
 
