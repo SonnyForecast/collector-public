@@ -1,0 +1,20 @@
+name: NTC publication-time probe (manual)
+# When are the day-ahead capacities of the Swiss borders published (createdDateTime)? Decides whether the 07:00 or
+# 10:30 run may use them.
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ENTSOE_TOKEN: ${{ secrets.ENTSOE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q pandas requests
+      - run: python probes/ntc_time_probe.py
