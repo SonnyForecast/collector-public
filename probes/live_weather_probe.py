@@ -16,3 +16,12 @@ for r in p.itertuples():
         ok = h[h[c].notna()]
         print(f"  {c}: last valid time with a value {ok.time.max()} | share of {tom} hours with a value "
               f"{h[h.time.dt.date == tom][c].notna().mean():.2f}")
+
+# values for the next two days at the first point, to compare later with the history the collector stores once the
+# hours are past (identical = the live lead-2 values are the true lead-2 forecast)
+r = p.iloc[0]
+j = requests.get(PREV, params=dict(latitude=r.lat, longitude=r.lon, hourly=",".join(hourly), models="ecmwf_ifs025",
+                                   start_date=tom.isoformat(), end_date=d2.isoformat(), timezone="GMT"), timeout=60).json()
+h = pd.DataFrame(j["hourly"])
+print("VALUES", r.point)
+print(h[["time"] + [c for c in h.columns if c.startswith("wind")]].to_csv(index=False))

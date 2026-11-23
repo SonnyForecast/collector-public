@@ -1,6 +1,9 @@
-name: Live data probe (manual)
-# Checks what the 07:00 live run can fetch (Open-Meteo previous-runs lead 2 for the next day).
+name: Live data probe
+# Checks what the 07:00 live run can fetch (Open-Meteo previous-runs lead 2 for the next day). Manual, and at
+# 05:31 UTC (06:31 CET) until the live run exists.
 on:
+  schedule:
+    - cron: "31 5 * * *"
   workflow_dispatch: {}
 permissions:
   contents: read
