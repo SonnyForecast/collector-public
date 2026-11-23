@@ -1,7 +1,9 @@
-name: NTC publication-time probe (manual)
+name: NTC publication-time probe
 # When are the day-ahead capacities of the Swiss borders published (createdDateTime)? Decides whether the 07:00 or
 # 10:30 run may use them.
 on:
+  schedule:
+    - cron: "7 4-10 * * *"     # hourly 05:07–11:07 CET for a few days, then remove
   workflow_dispatch: {}
 permissions:
   contents: read
