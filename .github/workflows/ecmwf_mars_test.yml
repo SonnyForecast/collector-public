@@ -22,4 +22,5 @@ jobs:
         env:
           ECMWF_API_KEY: ${{ secrets.ECMWF_API_KEY }}
           ECMWF_API_EMAIL: ${{ secrets.ECMWF_API_EMAIL }}
+          ECMWF_API_URL: https://api.ecmwf.int/v1     # the client reads key/email/url from the environment first
         run: python collectors/ecmwf_mars_test.py
