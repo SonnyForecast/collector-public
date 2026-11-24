@@ -1,0 +1,24 @@
+name: EXAA publication-time probe
+# When do tomorrow's EXAA 10:15 prices appear on exaa.at, ENTSO-E and APG? Started every 5 min 10:00–14:00 Zurich by a
+# Modal cron (spot-ensemble CH/modal/app.py exaa_probe_cron; GitHub cron is hours late). Manual runs too. Remove after
+# a few days once task 8 (10:30 live run) has its answer.
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: exaa-probe
+  cancel-in-progress: false
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ENTSOE_TOKEN: ${{ secrets.ENTSOE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q pandas requests
+      - run: python probes/exaa_time_probe.py
