@@ -1,0 +1,21 @@
+name: Price probe (manual)
+# Prints one day's CH day-ahead prices (Energy-Charts), e.g. to score a live forecast before the collectors run.
+on:
+  workflow_dispatch:
+    inputs:
+      day:
+        description: "delivery day yyyy-mm-dd"
+        required: true
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q pandas requests
+      - run: python probes/price_probe.py "${{ github.event.inputs.day }}"
