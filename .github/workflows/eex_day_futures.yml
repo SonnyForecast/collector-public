@@ -1,0 +1,22 @@
+name: EEX day futures probe
+on:
+  workflow_dispatch:
+    inputs:
+      areas: {description: "areas", required: false, default: "CH,DE,FR,AT,IT"}
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -q requests
+      - run: python probes/eex_day_futures.py "${{ github.event.inputs.areas }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eex_day_futures
+          path: eex_day_futures.csv
+          retention-days: 7
