@@ -60,5 +60,9 @@ for row in day:
 with open("eex_day_futures.csv", "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=list(out[0]) if out else ["area"]); w.writeheader(); w.writerows(out)
 print("rows", len(out))
+for o in out:                                   # settled rows into the log (artifacts are not reachable everywhere)
+    if o["settlement"] is not None:
+        print("ROW", o["area"], o["product"], o["maturity"], o["display_day"], o["trade_date"], o["settlement"],
+              o["volume"] if o["volume"] is not None else "", o["open_interest"] if o["open_interest"] is not None else "")
 if out:
     print("example rows:", out[:3])
