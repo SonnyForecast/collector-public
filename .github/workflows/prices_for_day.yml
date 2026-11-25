@@ -1,0 +1,20 @@
+name: Prices for one day (ENTSO-E, for scoring)
+on:
+  workflow_dispatch:
+    inputs:
+      day: {description: "delivery day yyyy-mm-dd", required: true}
+      zone: {description: "zone", required: false, default: "CH"}
+permissions:
+  contents: read
+jobs:
+  prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      ENTSOE_TOKEN: ${{ secrets.ENTSOE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -q pandas requests
+      - run: python probes/prices_for_day.py "${{ github.event.inputs.day }}" "${{ github.event.inputs.zone }}"
