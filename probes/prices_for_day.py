@@ -10,14 +10,21 @@ D = date.fromisoformat(sys.argv[1]); zone = sys.argv[2] if len(sys.argv) > 2 els
 # delivery day in CET: 23:00 UTC of D−1 to 23:00 UTC of D (winter)
 # sequence 1 = the coupled day-ahead auction (SDAC); DE/AT also carry EXAA as sequence 2 (pass "2" as 3rd argument)
 seq = sys.argv[3] if len(sys.argv) > 3 else "1"
-p = {"documentType": "A44", "in_Domain": EIC[zone], "out_Domain": EIC[zone], "contract_MarketAgreement.type": "A01",
-     "classificationSequence_AttributeInstanceComponent.position": seq,
+p = {"documentType": "A44", "in_Domain": EIC[zone], "out_Domain": EIC[zone],
      "periodStart": (D - timedelta(days=1)).strftime("%Y%m%d") + "2300", "periodEnd": D.strftime("%Y%m%d") + "2300"}
 x = entsoe_api.fetch(os.environ["ENTSOE_TOKEN"], p, tries=2)
 txt = x.decode() if isinstance(x, bytes) else str(x or "")
+# split by TimeSeries: a series with classificationSequence position 2 is EXAA (DE/AT); without it or with 1, SDAC
+series = re.findall(r"<TimeSeries>(.*?)</TimeSeries>", txt, flags=re.S)
+pick = []
+for t in series:
+    pos = re.findall(r"<classificationSequence_AttributeInstanceComponent\.position>(\d+)<", t)
+    if (pos[0] if pos else "1") == seq:
+        pick.append(t)
+txt = pick[0] if pick else ""                     # one series (several would mix resolutions)
 res = re.findall(r"<resolution>([^<]+)</resolution>", txt)
 pts = [(int(a), float(b)) for a, b in re.findall(r"<position>(\d+)</position>\s*<price\.amount>([^<]+)</price\.amount>", txt)]
-print("resolution", res[:2], "points", len(pts))
+print("series", len(series), "picked", len(pick), "resolution", res[:2], "points", len(pts))
 if pts:
     per_h = 4 if res and res[0] == "PT15M" else 1
     vals = dict(pts); n = max(vals)
