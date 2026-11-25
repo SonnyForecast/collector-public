@@ -1,0 +1,24 @@
+name: Weather check for live days (diagnostic)
+on:
+  workflow_dispatch:
+    inputs:
+      start: {description: "first delivery day yyyy-mm-dd", required: true}
+      end: {description: "last delivery day yyyy-mm-dd", required: true}
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: SonnyForecast/HPFC-data
+          token: ${{ secrets.HPFC_DATA_TOKEN }}
+          path: data-repo
+          sparse-checkout: data/weather_fc/points.csv
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -q pandas requests
+      - run: python probes/weather_check_days.py "${{ github.event.inputs.start }}" "${{ github.event.inputs.end }}"
