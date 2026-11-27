@@ -6,9 +6,9 @@ H = {"User-Agent": "hpfc-data-archiver/0.1 (personal research)", "Referer": "htt
 API = "https://api.eex-group.com/pub/market-data/table-data"
 s = requests.Session(); s.headers.update(H)
 for area, code in (("CH", "FC"), ("DE", "DB"), ("FR", "F7")):
-    for mat, day in (("202609", 15), ("202606", 10), ("202601", 20), ("202510", 15), ("202503", 12), ("202410", 8)):
+    for mat, day in (("202611", 20), ("202610", 20), ("202609", 15), ("202606", 10), ("202601", 20), ("202510", 15), ("202503", 12), ("202410", 8)):
         p = dict(shortCode=f"{code}{day:02d}", commodity="POWER", pricing="F", area=area, product="Base", maturity=mat,
-                 startDate=f"{mat[:4]}-{mat[4:]}-01", endDate=f"{mat[:4]}-{mat[4:]}-28", maturityType="Day", isRolling="true")
+                 startDate=f"{mat[:4]}-{mat[4:]}-01", endDate="2026-11-27", maturityType="Day", isRolling="true")
         try:
             r = s.get(API, params=p, timeout=60)
             j = r.json() if r.ok else {}
