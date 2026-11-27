@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       max_min:
-        description: "minutes for the history catch-up (default 8; the job times out at 40)"
+        description: "minutes for the history catch-up (default 25; the job times out at 40)"
         required: false
-        default: "8"
+        default: "25"
 
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
     env:
       DATA_ROOT: ${{ github.workspace }}/data-repo
       DIRS: data/weather_fc
-      HIST_MAX_MIN: ${{ github.event.inputs.max_min || '8' }}
+      HIST_MAX_MIN: ${{ github.event.inputs.max_min || '25' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
