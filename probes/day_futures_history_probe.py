@@ -13,7 +13,10 @@ for area, code in (("CH", "FC"), ("DE", "DB"), ("FR", "F7")):
             r = s.get(API, params=p, timeout=60)
             j = r.json() if r.ok else {}
             rows = j.get("data") or []
-            print(area, p["shortCode"], mat, "HTTP", r.status_code, "rows", len(rows), (rows[:2] if rows else r.text[:120]))
+            hx = {h: k for k, h in enumerate(j.get("header") or [])}
+            st = [x for x in rows if "settlPx" in hx and x[hx["settlPx"]] is not None]
+            print(area, p["shortCode"], mat, "HTTP", r.status_code, "rows", len(rows), "with settlement", len(st),
+                  [(x[hx["tradeDate"]], x[hx["settlPx"]]) for x in st[:3]])
         except Exception as e:
             print(area, mat, "error", str(e)[:100])
 for c in ("ch", "de", "fr"):
