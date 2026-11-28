@@ -1,0 +1,50 @@
+name: OMIE curves (research)
+# One-off research job (solar-crash chat, 28 Nov 2026): OMIE aggregated day-ahead bid curves -> compact hourly curve
+# features in HPFC-data data/omie/. mode=probe only prints file formats.
+on:
+  workflow_dispatch:
+    inputs:
+      mode: {description: "probe | build", required: false, default: "probe"}
+      start: {description: "first day (build)", required: false, default: "2023-01-01"}
+      end: {description: "last day (build)", required: false, default: "2026-10-31"}
+permissions:
+  contents: read
+concurrency:
+  group: omie_curves
+  cancel-in-progress: false
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      DATA_ROOT: ${{ github.workspace }}/data-repo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -q requests numpy pandas
+      - name: Probe
+        if: github.event.inputs.mode == 'probe'
+        run: python probes/omie_probe.py
+      - uses: actions/checkout@v4
+        if: github.event.inputs.mode == 'build'
+        with:
+          repository: SonnyForecast/HPFC-data
+          token: ${{ secrets.HPFC_DATA_TOKEN }}
+          path: data-repo
+          fetch-depth: 1
+      - name: Build and push
+        if: github.event.inputs.mode == 'build'
+        working-directory: data-repo
+        run: |
+          git config user.name "collector-public"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          python $GITHUB_WORKSPACE/collectors/collect_omie_curves.py --start "${{ github.event.inputs.start }}" --end "${{ github.event.inputs.end }}"
+          git add data/omie
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git commit -q -m "omie curve features (collector-public)"
+          for i in 1 2 3 4 5; do
+            if git pull -q --rebase && git push -q; then echo pushed; exit 0; fi
+            sleep 15
+          done
+          echo "::error::could not push"; exit 1
