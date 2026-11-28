@@ -41,14 +41,24 @@ def catalogue(s):
 
 
 def deliv_of(c, mtype):
-    """Delivery day (Day) or the Saturday (Weekend) from the catalogue's maturity (yyyymm) + displayDay."""
-    d = date(int(str(c["maturity"])[:4]), int(str(c["maturity"])[4:6]), int(c["displayDay"]))
-    if mtype == "Weekend" and d.weekday() != 5:
-        d = d - timedelta(days=1) if d.weekday() == 6 else d     # Sunday given -> its Saturday; else keep, flagged in log
-    return d.isoformat()
+    """Day: delivery day from maturity (yyyymm) + displayDay. Weekend: EEX numbers weekends within the month like the
+    weeks (short code ends in n = 1..5, no displayDay); returns the Saturday of the n-th weekend whose Sunday falls in
+    the month (the CH week convention). Checked against the Sat/Sun day futures (spot-ensemble
+    CH/results/solar_crash_20261128/check_weekend_mapping.py); the raw maturity and n are kept in the file so another
+    convention can be re-mapped without a re-download."""
+    y, m = int(str(c["maturity"])[:4]), int(str(c["maturity"])[4:6])
+    if mtype == "Day":
+        return date(y, m, int(c["displayDay"])).isoformat()
+    n = int(str(c["shortCode"])[-1])
+    first = date(y, m, 1)
+    sunday = first + timedelta(days=(6 - first.weekday()) % 7) + timedelta(days=7 * (n - 1))
+    if sunday.month != m:
+        raise ValueError("no such weekend")
+    return (sunday - timedelta(days=1)).isoformat()
 
 
 FILES = {"Day": "day_futures.csv", "Weekend": "weekend_futures.csv"}
+WE_FIELDS = FIELDS + ["maturity", "weekend_n"]
 
 
 def main():
@@ -77,8 +87,6 @@ def collect(s, full, mtype, out, days):
             deliv = deliv_of(c, mtype)
         except (KeyError, ValueError, TypeError):
             continue
-        if mtype == "Weekend" and date.fromisoformat(deliv).weekday() != 5:
-            n_odd += 1
         p = dict(shortCode=c["shortCode"], commodity="POWER", pricing="F", area=c["area"], product=c["product"],
                  maturity=c["maturity"], startDate=str(start), endDate=str(end), maturityType=mtype, isRolling="true")
         for i in range(3):
@@ -96,6 +104,10 @@ def collect(s, full, mtype, out, days):
                         old[key] = dict(area=c["area"], product=c["product"], delivery=deliv, trade_date=g("tradeDate"),
                                         settlement=g("settlPx"), volume_mwh=v(g("totVolTrdd")),
                                         open_interest_lots=v(g("grossOpenInt")), short_code=c["shortCode"])
+                        if mtype == "Weekend":
+                            old[key].update(maturity=c["maturity"], weekend_n=str(c["shortCode"])[-1])
+                            if not n_odd:      # once per run: what the API sends for a weekend contract
+                                print("Weekend data header:", list(hx)); n_odd = 1
                     break
                 if r.status_code in (400, 404):
                     break
@@ -107,9 +119,8 @@ def collect(s, full, mtype, out, days):
         time.sleep(0.3)
     rows = sorted(old.values(), key=lambda r: (r["area"], r["product"], r["delivery"], r["trade_date"]))
     with open(out, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=FIELDS); w.writeheader(); w.writerows(rows)
-    print(f"{mtype} futures: {len(cat)} contracts listed, {n_fail} failed, {n_new} new rows, {len(rows)} in {out}"
-          + (f", {n_odd} deliveries not on a Saturday (check the mapping)" if n_odd else ""))
+        w = csv.DictWriter(f, fieldnames=WE_FIELDS if mtype == "Weekend" else FIELDS); w.writeheader(); w.writerows(rows)
+    print(f"{mtype} futures: {len(cat)} contracts listed, {n_fail} failed, {n_new} new rows, {len(rows)} in {out}")
 
 
 def v(x):
