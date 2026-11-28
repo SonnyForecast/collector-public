@@ -30,7 +30,7 @@ def worldbank():
     print("world bank", url, len(r.content))
 
 
-EUA_FIRST_YEAR = 2023   # daily auction prices from here on (daily CO2 input for the spot ensemble)
+EUA_FIRST_YEAR = int(_os.environ.get("EUA_FIRST_YEAR", 2023))   # daily auction prices from here on (CO2 input)
 
 
 def eua():
@@ -41,7 +41,9 @@ def eua():
         if y < this and f.exists():
             continue
         url = f"https://public.eex-group.com/eex/eua-auction-report/emission-spot-primary-market-auction-report-{y}-data.xlsx"
-        r = requests.get(url, headers=UA, timeout=120); r.raise_for_status()
+        r = requests.get(url, headers=UA, timeout=120)
+        if not r.ok:                          # older reports may sit under another name: log and go on
+            print("eua auctions", y, "HTTP", r.status_code); continue
         f.write_bytes(r.content)
         print("eua auctions", y, len(r.content))
 

@@ -25,6 +25,7 @@ Past years are fetched once; the current year (outages: last 120 days and the ye
     python collect_entsoe_market.py                    # everything, 2023 .. now
     python collect_entsoe_market.py outages flows      # some parts
     python collect_entsoe_market.py --first-year 2024
+    python collect_entsoe_market.py outages --zone FR --backfill-from 2015   # history before the archive
     python collect_entsoe_market.py outages --zone FR   # one zone
 """
 import os
@@ -139,7 +140,9 @@ def parse_outage_full(xml_bytes, zone, doc):
 KEY = ["mrid", "revision", "unit_eic", "start_utc", "available_mw"]
 
 
-def outages(token, first_year, full=False, zones=None):
+def outages(token, first_year, full=False, zones=None, backfill_from=None):
+    """backfill_from: fetch outages from that year up to FIRST_YEAR (the start of the stored archive) and merge them
+    in (history backfill; the latest revision of each outage only, as for every pre-archive period)."""
     now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
     for zone in zones or OUTAGE_ZONES:
         f = OUT / f"outages_{zone}.csv.gz"
@@ -149,6 +152,8 @@ def outages(token, first_year, full=False, zones=None):
             old = None
         start = datetime(first_year, 1, 1, tzinfo=UTC) if old is None else now - timedelta(days=120)
         end = now + timedelta(days=366)
+        if backfill_from and old is not None:
+            start, end = datetime(backfill_from, 1, 1, tzinfo=UTC), datetime(FIRST_YEAR, 1, 1, tzinfo=UTC)
         rows, t0 = [], start
         while t0 < end:                       # windows up to a year (API limit); split when > 5000 documents
             t1 = min(end, t0 + timedelta(days=365))
@@ -287,7 +292,8 @@ def main(argv):
         t = time.time()
         zones = argv[argv.index("--zone") + 1].split(",") if "--zone" in argv else None
         if p == "outages":
-            outages(token, first, "--full" in argv, zones)
+            bf = int(argv[argv.index("--backfill-from") + 1]) if "--backfill-from" in argv else None
+            outages(token, first, "--full" in argv, zones, bf)
         elif p == "revisions":
             revisions(token, zones)
         else:

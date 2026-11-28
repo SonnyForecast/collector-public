@@ -1,0 +1,76 @@
+name: History backfill (to 2015, spot-ensemble task 12)
+# One-off: extends the HPFC-data inputs back in time. Each part is resumable / skips what is stored; run parts
+# separately if a run nears the time limit. Writes only into HPFC-data, commits per part.
+on:
+  workflow_dispatch:
+    inputs:
+      parts:
+        description: "load flows ntc outages exaa sdac fundamentals eua (space separated)"
+        default: "load flows ntc exaa sdac fundamentals eua"
+      first_year:
+        description: "first year to fetch"
+        default: "2015"
+permissions:
+  contents: read
+concurrency:
+  group: backfill-history
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      DATA_ROOT: ${{ github.workspace }}/data-repo
+      ENTSOE_TOKEN: ${{ secrets.ENTSOE_TOKEN }}
+      PARTS: ${{ github.event.inputs.parts }}
+      FIRST: ${{ github.event.inputs.first_year }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: SonnyForecast/HPFC-data
+          token: ${{ secrets.HPFC_DATA_TOKEN }}
+          path: data-repo
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests pandas openpyxl
+      - name: Backfill and push
+        working-directory: data-repo
+        run: |
+          git config user.name "collector-public"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          commit() {
+            git add -A data
+            if git diff --cached --quiet; then echo "nothing new ($1)"; return 0; fi
+            git commit -q -m "$1 backfill from $FIRST $(date -u +%Y-%m-%d) (collector-public)"
+            for i in 1 2 3 4 5; do
+              if git pull -q --rebase && git push -q; then echo "pushed $1"; return 0; fi
+              sleep 15
+            done
+            echo "::error::could not push $1"; return 1
+          }
+          C=$GITHUB_WORKSPACE/collectors
+          has() { echo " $PARTS " | grep -q " $1 "; }
+          rc=0
+          if has load; then
+            python $C/collect_entsoe_load.py $(seq $FIRST 2022) || rc=1; commit "entsoe load" || rc=1
+          fi
+          if has flows; then python $C/collect_entsoe_market.py flows --first-year $FIRST || rc=1; commit "entsoe flows" || rc=1; fi
+          if has ntc; then python $C/collect_entsoe_market.py ntc --first-year $FIRST || rc=1; commit "entsoe ntc" || rc=1; fi
+          if has outages; then
+            for z in CH FR DE_LU IT_NORTH; do
+              python $C/collect_entsoe_market.py outages --zone $z --backfill-from $FIRST || rc=1; commit "entsoe outages $z" || rc=1
+            done
+          fi
+          if has exaa; then
+            M=$([ "$FIRST" -lt 2018 ] && echo 2018-10 || echo $FIRST-01)    # EXAA AT / DE_LU as separate zones from Oct 2018
+            python $C/collect_entsoe_exaa.py $M || rc=1; commit "entsoe exaa" || rc=1
+          fi
+          if has sdac; then python $C/collect_entsoe_exaa.py --sdac $FIRST-01 || rc=1; commit "entsoe sdac" || rc=1; fi
+          if has fundamentals; then
+            python $C/collect_fundamentals.py --first-year $FIRST --out $RUNNER_TEMP/fundamentals --csv-dir data/energy_charts/fundamentals || rc=1
+            commit "energy-charts fundamentals" || rc=1
+          fi
+          if has eua; then EUA_FIRST_YEAR=$FIRST python $C/collect_fuels.py || rc=1; commit "eua auctions" || rc=1; fi
+          exit $rc
