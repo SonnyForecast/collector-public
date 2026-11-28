@@ -36,6 +36,8 @@ jobs:
       - name: Build and push
         if: github.event.inputs.mode == 'build'
         working-directory: data-repo
+        env:
+          ENTSOE_TOKEN: ${{ secrets.ENTSOE_TOKEN }}
         run: |
           git config user.name "collector-public"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
