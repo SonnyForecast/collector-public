@@ -1,0 +1,57 @@
+name: EEX all market data (monthly; runs HPFC-data's collector, free minutes)
+# Moved here from HPFC-data eex_all.yml on 28 Nov 2026 (~130 private minutes a month). Collector code stays private
+# (run from the HPFC-data checkout). ~6,900 requests one at a time, roughly 2 hours; 46-day look-back on the 1st.
+on:
+  schedule:
+    - cron: "17 5 1 * *"
+  workflow_dispatch:
+    inputs:
+      days: {description: "days to look back (empty = 46)", required: false, default: ""}
+      commodities: {description: "comma separated (empty = POWER,NATGAS,ENVIRONMENTALS,GO,HYDROGEN)", required: false, default: ""}
+permissions:
+  contents: read
+concurrency:
+  group: eex_all
+  cancel-in-progress: false
+jobs:
+  eex-all:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    defaults:
+      run:
+        working-directory: data-repo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: SonnyForecast/HPFC-data
+          token: ${{ secrets.HPFC_DATA_TOKEN }}
+          path: data-repo
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -q requests
+      - name: Collect
+        id: run
+        continue-on-error: true
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.days }}" ]; then ARGS="$ARGS --days ${{ github.event.inputs.days }}"; fi
+          if [ -n "${{ github.event.inputs.commodities }}" ]; then ARGS="$ARGS --commodities ${{ github.event.inputs.commodities }}"; fi
+          python collect_eex_all.py $ARGS
+      - name: Status
+        run: python collect_eex_all.py --status
+      - name: Commit and push
+        run: |
+          git config user.name "collector-public"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/eex/all 2>/dev/null || true
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git commit -q -m "eex all $(date -u +%Y-%m-%d) (collector-public)"
+          for i in 1 2 3 4 5 6; do
+            if git pull -q --rebase && git push -q; then echo pushed; break; fi
+            if [ "$i" = "6" ]; then echo "::error::could not push"; exit 1; fi
+            sleep 20
+          done
+      - name: Fail the job if the collector failed
+        if: steps.run.outcome == 'failure'
+        run: exit 1

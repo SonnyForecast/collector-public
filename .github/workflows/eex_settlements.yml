@@ -1,0 +1,82 @@
+name: EEX settlements (runs HPFC-data's collectors, free minutes)
+# Moved here from HPFC-data eex.yml on 28 Nov 2026: private-repo Actions minutes ran out (this job was ~150 min/week).
+# The collector code stays private: it is run from the HPFC-data checkout, nothing is copied into this public repo.
+# Evening run looks back 4 trading days; the morning run only collects if the last trading day is still missing.
+# The push to HPFC-data (data/eex/settlements.csv) triggers the HPFC build there.
+on:
+  schedule:
+    - cron: "43 21 * * 1-5"
+    - cron: "13 6 * * 2-6"
+  workflow_dispatch:
+    inputs:
+      days: {description: "days to look back (empty = 4; 46 refills EEX's whole public window)", required: false, default: ""}
+permissions:
+  contents: read
+concurrency:
+  group: eex_settlements
+  cancel-in-progress: false
+jobs:
+  eex:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: data-repo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: SonnyForecast/HPFC-data
+          token: ${{ secrets.HPFC_DATA_TOKEN }}
+          path: data-repo
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - name: Morning run - already have the last trading day?
+        id: chk
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$(date -u +%H)" -lt 12 ]; then
+            python - <<'PY'
+          import csv, datetime as dt, os
+          from check_data_health import last_trading_day
+          want = last_trading_day(dt.date.today()).isoformat()
+          have = any(r["trade_date"] == want and r["area"] == "CH" for r in csv.DictReader(open("data/eex/settlements.csv")))
+          print("last trading day", want, "already archived" if have else "missing")
+          open(os.environ["GITHUB_OUTPUT"], "a").write(f"skip={'yes' if have else 'no'}\n")
+          PY
+          else echo "skip=no" >> "$GITHUB_OUTPUT"; fi
+      - run: pip install -q requests pandas
+        if: steps.chk.outputs.skip != 'yes'
+      - name: Collect
+        id: run
+        if: steps.chk.outputs.skip != 'yes'
+        continue-on-error: true
+        run: python collect_eex.py --days "${{ github.event.inputs.days || '4' }}"
+      - name: Option implied volatilities (DE, FR, IT)
+        id: options
+        if: steps.chk.outputs.skip != 'yes'
+        continue-on-error: true
+        run: python collect_eex_options.py --days "${{ github.event.inputs.days || '4' }}"
+      - name: Derive off-peak
+        if: steps.chk.outputs.skip != 'yes'
+        run: python derive_offpeak.py
+      - name: Commit and push
+        if: steps.chk.outputs.skip != 'yes'
+        run: |
+          git config user.name "collector-public"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/eex
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git commit -q -m "eex $(date -u +%Y-%m-%d) (collector-public)"
+          for i in 1 2 3 4 5; do
+            if git pull -q --rebase && git push -q; then echo pushed; break; fi
+            if [ "$i" = "5" ]; then echo "::error::could not push"; exit 1; fi
+            sleep 15
+          done
+      - name: Status
+        if: steps.chk.outputs.skip != 'yes'
+        run: |
+          python collect_eex.py --status
+          python collect_eex_options.py --status
+      - name: Fail the job if a collector failed
+        if: steps.run.outcome == 'failure' || steps.options.outcome == 'failure'
+        run: exit 1
