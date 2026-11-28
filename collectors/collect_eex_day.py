@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Archive EEX day futures settlements (public, delayed; EEX keeps each contract only ~45 days) for CH, DE, FR, AT,
-IT, Base and Peak -> data/eex/day_futures.csv in the data repo (DATA_ROOT). One row per (area, product, delivery day,
+IT, Base and Peak -> data/eex/day_futures.csv in the data repo (DATA_ROOT); single-weekend contracts (EEX maturity
+type "Weekend", Sat+Sun) of the same areas -> data/eex/weekend_futures.csv (added 28 Nov 2026, delivery = the
+Saturday; for crash-depth tests on solar-surplus weekends). One row per (area, product, delivery day,
 trade date). Why (25 Nov 2026): the CH day contract for D settled on the evening of D−2 is known at the 07:00 issue on
 D−1 and carried the level the members missed on 26 Nov (settled 288, actual 280, ensemble 258); 37-day test in
 spot-ensemble CH/results/day_futures_20261125. Personal, non-commercial research use (EEX Market Data Hub).
@@ -38,27 +40,47 @@ def catalogue(s):
     raise RuntimeError("EEX catalogue not available")
 
 
+def deliv_of(c, mtype):
+    """Delivery day (Day) or the Saturday (Weekend) from the catalogue's maturity (yyyymm) + displayDay."""
+    d = date(int(str(c["maturity"])[:4]), int(str(c["maturity"])[4:6]), int(c["displayDay"]))
+    if mtype == "Weekend" and d.weekday() != 5:
+        d = d - timedelta(days=1) if d.weekday() == 6 else d     # Sunday given -> its Saturday; else keep, flagged in log
+    return d.isoformat()
+
+
+FILES = {"Day": "day_futures.csv", "Weekend": "weekend_futures.csv"}
+
+
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--days", type=int, default=12); a = ap.parse_args()
-    out = Path(os.environ.get("DATA_ROOT", ".")) / "data" / "eex" / "day_futures.csv"
+    s = requests.Session(); s.headers.update(H)
+    full = catalogue(s)
+    for mtype, name in FILES.items():
+        collect(s, full, mtype, Path(os.environ.get("DATA_ROOT", ".")) / "data" / "eex" / name, a.days)
+
+
+def collect(s, full, mtype, out, days):
     out.parent.mkdir(parents=True, exist_ok=True)
     old = {}
     if out.exists():
         with open(out, newline="") as f:
             for r in csv.DictReader(f):
                 old[(r["area"], r["product"], r["delivery"], r["trade_date"])] = r
-    s = requests.Session(); s.headers.update(H)
-    cat = [c for c in catalogue(s) if c.get("area") in AREAS and c.get("maturityType") == "Day"
+    cat = [c for c in full if c.get("area") in AREAS and c.get("maturityType") == mtype
            and c.get("product") in ("Base", "Peak")]
-    end = date.today(); start = end - timedelta(days=a.days)
-    n_new = n_fail = 0
+    if mtype != "Day" and cat:      # log what EEX sends for these contracts, so the delivery mapping can be checked
+        print(mtype, "catalogue sample:", {k: cat[0].get(k) for k in ("area", "product", "shortCode", "maturity", "displayDay")})
+    end = date.today(); start = end - timedelta(days=days)
+    n_new = n_fail = n_odd = 0
     for c in cat:
         try:
-            deliv = date(int(str(c["maturity"])[:4]), int(str(c["maturity"])[4:6]), int(c["displayDay"])).isoformat()
+            deliv = deliv_of(c, mtype)
         except (KeyError, ValueError, TypeError):
             continue
+        if mtype == "Weekend" and date.fromisoformat(deliv).weekday() != 5:
+            n_odd += 1
         p = dict(shortCode=c["shortCode"], commodity="POWER", pricing="F", area=c["area"], product=c["product"],
-                 maturity=c["maturity"], startDate=str(start), endDate=str(end), maturityType="Day", isRolling="true")
+                 maturity=c["maturity"], startDate=str(start), endDate=str(end), maturityType=mtype, isRolling="true")
         for i in range(3):
             try:
                 r = s.get(API, params=p, timeout=60)
@@ -86,7 +108,8 @@ def main():
     rows = sorted(old.values(), key=lambda r: (r["area"], r["product"], r["delivery"], r["trade_date"]))
     with open(out, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS); w.writeheader(); w.writerows(rows)
-    print(f"day futures: {len(cat)} contracts listed, {n_fail} failed, {n_new} new rows, {len(rows)} in {out}")
+    print(f"{mtype} futures: {len(cat)} contracts listed, {n_fail} failed, {n_new} new rows, {len(rows)} in {out}"
+          + (f", {n_odd} deliveries not on a Saturday (check the mapping)" if n_odd else ""))
 
 
 def v(x):

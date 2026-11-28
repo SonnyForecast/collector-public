@@ -1,4 +1,4 @@
-name: EEX day futures (CH DE FR AT IT)
+name: EEX day and weekend futures (CH DE FR AT IT)
 # Daily archive of EEX day futures settlements -> HPFC-data data/eex/day_futures.csv. EEX keeps each contract ~45 days,
 # so a late or missed run costs nothing as long as one run lands within ~30 days (12-day look-back by default).
 on:
@@ -35,7 +35,7 @@ jobs:
           git config user.name "collector-public"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           python $GITHUB_WORKSPACE/collectors/collect_eex_day.py --days "${{ github.event.inputs.days || '12' }}"
-          git add data/eex/day_futures.csv
+          git add data/eex/day_futures.csv data/eex/weekend_futures.csv
           if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
           git commit -q -m "eex day futures $(date -u +%Y-%m-%d) (collector-public)"
           for i in 1 2 3 4 5; do
